@@ -272,8 +272,8 @@ function args2Str(args, argTypes) {
         } else if (args[j] == "[object Object]") {
             argsStr += JSON.stringify(args[j]) + ", "
         } else {
-            argsStr += args[j] + ", "
-            // argsStr += JSON.stringify(args[j]) + ", "
+            // argsStr += args[j] + ", "
+            argsStr += JSON.stringify(args[j]) + ", "
         }
     }
     if (argsStr.length > 2) {
@@ -345,9 +345,41 @@ function traceMethodCommon(target, methodName, enableLogStraceStack = false) {
                     }
                 }
 
-                if ((clsname +"." + methodName) == "com.android.server.wm.ActivityStarter.recycleTask") {
-                    log("moe_print : mAddingToTask = " + this.mAddingToTask.value + " mMovedToFront = " + this.mMovedToFront.value);
+                // if ((clsname +"." + methodName) == "com.android.server.wm.ActivityStarter.recycleTask") {
+                //     log("moe_print : mAddingToTask = " + this.mAddingToTask.value + " mMovedToFront = " + this.mMovedToFront.value);
+                // }
+                
+                if ((clsname +"." + methodName) == "com.android.server.wm.ActivityRecord.destroyImmediately"
+                    || (clsname +"." + methodName) == "com.android.server.wm.ActivityRecord.removeFromHistory"
+                    || (clsname +"." + methodName) == "com.android.server.wm.ActivityRecord.attachedToProcess"
+                    || (clsname +"." + methodName) == "com.android.server.wm.ActivityRecord.setProcess"
+                    || (clsname +"." + methodName) == "com.android.server.wm.ActivityRecord.cleanUp") {
+                    log("moe_ar : ActivityRecord this = " + this + " app = " + this.app.value);
                 }
+
+                try {
+
+                
+                if((clsname +"." + methodName) == "android.app.IActivityManager$Stub.onTransact"
+                && arguments[0] == 33
+                ) {
+
+                    var Parcel = Java.use("android.os.Parcel");
+                    log("moe_parcel : typeof" + typeof(arguments[1]));
+                    var parcelObj = Java.cast(arguments[1], Parcel);
+                    var parcel_bytearr = Parcel.marshall.apply(parcelObj);
+
+                    var parcel_bytearrArray = Java.array("byte", parcel_bytearr);
+                    var hexStringArray = Array.from(parcel_bytearrArray).map(byte => ('0' + (byte & 0xFF).toString(16)).slice(-2));
+                    var parcelbytearrStr = "byteArr[" + hexStringArray.join('') + "]";
+                    log("moe_parcel : result = " + parcelbytearrStr);
+
+                    
+                }
+
+            } catch (e4) {
+                log("parcel : traceMethodCommon failed : " + e4);
+            }
 
                 var retvalStr = "undefined";
 
@@ -525,167 +557,40 @@ function traceConstructorTmp(clsName){
 
 if (Java.available) {
     Java.perform(function () {
-        // printClassLoder()
-        // base
-        // baseTrace();
 
-        // twitter
-        // traceClassForeachParent("com.twitter.app.main.MainActivity");
-        // traceClass("android.app.Activity");
-        // traceClassForeachParent("com.vlite.unittest.activities.ContactsActivity");
+        // system_server
+        traceMethod("android.app.IApplicationThread$Stub$Proxy", "scheduleTransaction", true);
+        traceMethod("com.android.server.wm.ActivityStackSupervisor", "startSpecificActivity");
+        traceMethod("com.android.server.wm.ActivityStack", "resumeTopActivityInnerLocked");
 
-        // download provider
-        // traceClass("com.android.providers.downloads.DownloadProvider");
-        // traceClass("com.android.providers.downloads.DownloadNotifier");
-        // traceClass("com.android.providers.downloads.Helpers");
-        // traceClass("com.microsoft.skype.teams.views.activities.FreAuthActivity");
+        traceMethod("com.android.server.wm.ActivityRecord", "setProcess");
+        traceMethod("com.android.server.wm.ActivityRecord", "attachedToProcess");
+        traceMethod("com.android.server.wm.ActivityRecord", "hasProcess");
 
-        // traceClass("android.app.IActivityManager$Stub$Proxy");
-        // traceClass("android.app.IActivityTaskManager$Stub$Proxy");
-        // traceClass("android.app.IActivityClientController$Stub$Proxy");
-
-        // traceClass("android.content.ContentProviderProxy");
-        // traceClass("android.app.WindowConfiguration");
-        traceClass("android.app.Instrumentation")
-        // traceClass("com.android.server.wm.ClientLifecycleManager");
-        // traceClass("android.app.ClientTransactionHandler");
-        // traceClass("com.android.server.wm.ActivityStack");
-        // traceClass("android.app.ActivityThread");
-
-        // zoom
-        // traceClass("com.zipow.videobox.broadcast.ZmConfBroadCastReceiver");
-        // traceMethod("com.zipow.videobox.conference.module.f", "s");
-        // traceMethod("com.zipow.videobox.conference.model.data.i", "a");
-        // traceMethod("com.zipow.videobox.conference.jni.ZmConfDefaultCallback", "onConfStatusChanged2");
-        // traceClass("us.zoom.uicommon.activity.ZMActivity");
-        // traceMethod("com.zipow.videobox.broadcast.ZmConfBroadCastReceiver", "e");
-        // traceMethod("android.app.Activity", "finishActivity");
-        // traceMethod("android.app.Activity", "finish");
-        // traceClass("com.zipow.videobox.conference.ui.ZmConfPipActivity");
-
-        // traceClass("com.zipow.videobox.conference.ui.ZmFoldableConfActivity");
-        // traceMethod("us.zoom.libtools.helper.l$b", "onActivityCreated");
-        // traceMethod("us.zoom.libtools.helper.l$b", "onActivityDestroyed");
-        // traceMethod("java.util.LinkedList", 'remove');
-        // traceMethod("java.util.LinkedList", 'push');
-        // traceClass("com.zipow.videobox.SimpleActivity");
-
-        // traceMethod("com.zipow.cmmlib.CmmTimer", "callNativeTimerProc");
-        // traceMethod("com.zipow.cmmlib.CmmTimer", "setTimer");
-        // traceClass("android.view.accessibility.IAccessibilityManager$Stub$Proxy");
-
-
-        // traceMethod("com.android.server.wm.ActivityTaskManagerService", "startActivity");
-        // traceMethod("com.android.server.am.ActivityManagerService", "startActivity");
-
-        // traceClass("android.media.MediaHTTPConnection");
-
-        // traceClass("android.content.pm.PackageParser");
-        // traceClass("android.content.pm.PackageParser$PackageLite");
-
-        // traceClass("com.android.settings.thememanager.ringtone.LocalRingtoneManagerActivity");
-        // traceClass("com.whatsapp.settings.SettingsNotifications");
-        // traceClass("com.vlite.sdk.proxy.IntentChooserActivity");
-
-        var enableLogStraceStack = true;
-
-        // traceMethod("aaki", "c", enableLogStraceStack);
-        // traceMethod("aaki", "a");
-
-        // traceMethod("javax.crypto.Cipher", "doFinal", enableLogStraceStack);
-        // traceMethod("javax.crypto.Cipher", "updateAAD");
-
-        // traceClass("com.bpi.ng.mobilebanking.util.RootChecker");
-     
-        // traceMethod("android.content.pm.IPackageManager$Stub$Proxy", "getInstallerPackageName");
-
-
-        // traceClass("com.rsa.mobilesdk.sdk.RootDetect");
-        // traceClass("com.rsa.mobilesdk.sdk.RootedDeviceCheckerSafetyNet");
-        // traceClass("com.rsa.mobilesdk.sdk.CollectDeviceData");
-        // traceClass("com.rsa.mobilesdk.sdk.RootDetectNative");
-        // traceClass("com.rsa.mobilesdk.sdk.RsaLogger");
-        // traceClass("com.bpi.ng.mobilebanking.util.RootChecker");
-        // traceClass("com.backbase.android.core.security.environment.RootVerification");
-        // traceMethod("com.bpi.ng.mobilebanking.nwidget.rsa.transaction.status.views.MobileKeyTransactionStatus$a", "title", true);
+        traceMethod("com.android.server.wm.ActivityRecord", "destroyImmediately");
+        traceMethod("com.android.server.wm.ActivityRecord", "removeFromHistory");
+        traceMethod("com.android.server.wm.ActivityRecord", "cleanUp");
 
 
 
+        // traceClass("android.app.IApplicationThread$Stub$Proxy");
+        // traceMethod("com.android.server.wm.ActivityServiceConnectionsHolder", "disconnectActivityFromServices", true);
+        // traceMethod("com.android.server.wm.ActivityStarter", "recycleTask");
+        // traceMethod("com.android.server.wm.ActivityStarter", "deliverToCurrentTopIfNeeded");
+        // traceMethod("com.android.server.wm.ActivityStarter", "startActivityInner");
 
-        // traceMethod("com.bpi.ng.mobilebanking.view.activity.MainViewImpl", "h", true);
-        
-        // traceMethod("com.backbase.android.utils.net.response.Response", "getStringResponse");
-        // traceMethod("com.backbase.android.utils.net.response.Response", "setRequestCode");
-        // traceMethod("com.backbase.android.utils.net.response.Response", "isErrorResponse");
-
-        // traceMethod("com.backbase.android.utils.net.NetworkConnector", "getRequestUrl");
-        // traceMethod("com.backbase.android.utils.net.a", "a");
-
-
-        // twitter
-        // traceClass("dix", true);
-        // traceClass("nix", true);
-
-        // traceMethod("nex", "a");
-        // traceMethod("nex", "i");
-        // traceMethod("nex", "k");
-        // traceMethod("nex", "e");
-        // traceMethod("nex", "f");
-        // traceMethod('android.util.Log', "w");
-        // traceMethod('android.util.Log', "i");
-        // traceMethod('android.util.Log', "d");
-        // traceMethod('android.util.Log', "e");
-
-        //         y5i.h(stringBuilder0, s, " could not execute call because it requires feature (", tga0.c, ", ");
-        // traceClass("com.google.android.gms.auth.api.signin.GoogleSignInAccount");
-        // traceClass("com.google.android.gms.auth.api.signin.GoogleSignInOptions");
-        // traceClass("com.google.android.gms.auth.api.signin.RevocationBoundService");
-        // traceClass("com.google.android.gms.auth.api.signin.SignInAccount");
-
-
-        // traceMethod("g53", "d3", true);
-        // traceMethod("c0j$b", "h", true);
-        // traceMethod("p17$b", "i");
-        // traceMethod("com.twitter.model.json.onboarding.ocf.subtasks.JsonCta", "t");
-        // traceConstructor("p17", true);
-        // traceClass("p17$a", true);
-        // traceClass("q17");
-        // traceMethod("java.util.ArrayList", "addAll");
-        // traceMethod("csd", "f");
-        // traceConstructor("c0j");
-
-
-        // traceConstructor("tga");
-
-        // traceMethod("android.os.IBinder", "queryLocalInterface");
-
-        // traceConstructor("com.google.android.gms.common.api.a", true);
-
-        // traceClass("com.google.android.apps.gsa.searchnow.SearchNowActivity");
+        // traceMethod("com.android.server.wm.ActivityStarter", "resumeTargetStackIfNeeded");
+        // traceMethod("com.android.server.wm.ActivityStarter", "complyActivityFlags");
+        // traceMethod("com.android.server.wm.ActivityStarter", "setTargetStackIfNeeded");
 
 
 
-        // tiktok
-        // traceMethod("X.UNm", "LIZJ");
-        // traceMethod("android.app.Activity", "isFinishing");
-        // traceMethod("X.e7i", "LJIIIZ");
-        // traceMethod("android.app.IActivityManager$Stub$Proxy", "finishActivity", true);
-        // traceMethod("android.app.Instrumentation", "callActivityOnPause", true);
-        // traceMethod("android.app.Instrumentation", "callActivityOnStop", true);
-
-        // traceMethod("android.app.Instrumentation", "newActivity", true);
-
-        // traceMethod("android.app.LoadedApk$ServiceDispatcher", "connected", true);
-        // traceMethod("android.app.LoadedApk$ServiceDispatcher$InnerConnection", "connected", true);
-        // traceMethod("android.app.LoadedApk$ServiceDispatcher", "doConnected", true);
-
-        // traceMethod("android.app.IActivityManager$Stub$Proxy", "setServiceForeground", true);
-        // traceMethod("android.app.IActivityManager$Stub$Proxy", "publishService", true);
+        // traceMethod("com.android.server.am.ActiveServices", "publishServiceLocked", true);
+        // traceMethod("com.android.server.am.ActivityManagerService", "publishService");
 
         // traceMethod("android.app.IActivityManager$Stub", "onTransact");
         // traceMethod("android.app.IActivityManager$Stub", "publishService");
 
-        // traceMethod("com.chachastation.app.services.OrderCheckService", "onBind");
 
 
 
