@@ -3,17 +3,25 @@
  * frida -U -f com.google.android.youtube -l trace_all_method_of_class.js
  * frida -U -p $(adb shell ps -ef|grep line | awk '{print $2}') -l trace_all_method_of_class.js
  */
+
+var TAG = "frida_hook";
+
+
+function setTag(tag) {
+    TAG = tag;
+}
+
 function log(text) {
     console.log(">>>" + text)
     var Log = Java.use("android.util.Log");
-    Log.w(" 10260", text);
+    Log.w(TAG, text);
 }
 
 function logStrace() {
     var Log = Java.use("android.util.Log");
     var text = Log.getStackTraceString(Java.use("java.lang.Throwable").$new());
     console.log(text);
-    Log.w(" 10260", text);
+    Log.w(TAG, text);
 }
 
 function getTid() {
@@ -27,6 +35,7 @@ function getTName() {
 }
 
 function funcHandler(methodName, retval) {
+    return;
     if (methodName == "queryIntentActivities") {
         var ParceledListSlice = Java.use("android.content.pm.ParceledListSlice");
         var list = ParceledListSlice["getList"].apply(retval);
@@ -47,7 +56,7 @@ function funcHandler(methodName, retval) {
         }
         log("queryIntentActivities return : " + list + " hasNext : " + iteratorClass["hasNext"].apply(iterator));
 
-        console.log(Java.use("android.util.Log").getStackTraceString(Java.use("java.lang.Throwable").$new()));
+        // console.log(Java.use("android.util.Log").getStackTraceString(Java.use("java.lang.Throwable").$new()));
     } else if (methodName == "getRunningAppProcesses") {
         var ListClass = Java.use("java.util.ArrayList");
         var iterator = ListClass["iterator"].apply(retval);
@@ -131,6 +140,21 @@ function replaceClassLoder(className){
     });
 }
 
+function loadClass(clsname) {
+    var target;
+    try {
+        target = Java.use(clsname);
+    } catch (e1) {
+        replaceClassLoder(clsname);
+        try {
+            target = Java.classFactory.use(clsname);
+        } catch (e2) {
+            log(e2)
+        }
+    }
+    return target;
+}
+
 function traceClass(clsname, enableLogStraceStack = false) {
     var target;
     try {
@@ -144,6 +168,21 @@ function traceClass(clsname, enableLogStraceStack = false) {
         }
     }
     traceClassCommon(target, enableLogStraceStack)
+}
+
+function myJavaUse(clsname) {
+    var target;
+    try {
+        target = Java.use(clsname);
+    } catch (e1) {
+        replaceClassLoder(clsname);
+        try {
+            target = Java.classFactory.use(clsname);
+        } catch (e2) {
+            log(e2)
+        }
+    }
+    return target;
 }
 
 // 递归hook父类
@@ -261,6 +300,20 @@ function traceConstructorCommon(target, enableLogStraceStack = false) {
     }
 }
 
+function objToString(obj) {
+    try {
+        var ObjectClass = Java.use("java.lang.Object");
+        var ObjectValue = Java.cast(obj, ObjectClass);
+        let val = ObjectValue.toString();
+        return val;
+    } catch (e) {
+        log("objToString failed : " + e);
+        return obj;
+    }
+    
+    
+}
+
 function args2Str(args, argTypes) {
     var argsStr = "";
     for (var j = 0; j < args.length; j++) {
@@ -270,7 +323,7 @@ function args2Str(args, argTypes) {
             var hexStringArray = Array.from(typedArray).map(byte => ('0' + (byte & 0xFF).toString(16)).slice(-2));
             argsStr += "byteArr[" + hexStringArray.join('') + "], ";
         } else if (args[j] == "[object Object]") {
-            argsStr += JSON.stringify(args[j]) + ", "
+            argsStr += objToString(args[j]) + ", "
         } else {
             argsStr += args[j] + ", "
             // argsStr += JSON.stringify(args[j]) + ", "
@@ -285,6 +338,25 @@ function args2Str(args, argTypes) {
 function traceMethodCommon(target, methodName, enableLogStraceStack = false) {
     try {
         var clsname = target.$className;
+
+        if (target[methodName] == undefined) {
+
+            log("moe_err : " + "target " + clsname + " methodName " + methodName + " is undefined")
+
+            var methods = target.class.getMethods();
+            log("methods : " + methods);
+            methods.forEach(function (method) {
+                var methodName = method.getName();
+                if (typeof(target[methodName]) == 'undefined') {
+                    log("moe_err : methodName " + methodName + " is undefined")
+                    return;
+                }
+                // if (methodName != 'scheduleTransaction') {
+                //     return;
+                // }
+            });
+            return;
+        }
 
         var overloads = target[methodName].overloads;
         overloads.forEach(function (overload) {
@@ -301,6 +373,13 @@ function traceMethodCommon(target, methodName, enableLogStraceStack = false) {
                 var args = "";
                 var tid = getTid();
                 var tName = getTName();
+
+                if ((clsname +"." + methodName) == "android.app.IActivityTaskManager$Stub$Proxy.finishActivity") {
+                    if (arguments[3] == 1) {
+                        arguments[3] = 0
+                    }
+                }
+
                 var args = args2Str(arguments, overload.argumentTypes);
 
                 var start = (new Date()).valueOf();
@@ -315,10 +394,56 @@ function traceMethodCommon(target, methodName, enableLogStraceStack = false) {
                     log("moe_lll : dvdg.A(arg1:" + hexStringArray.join(''));
                 }
 
+
+                if ((clsname +"." + methodName) == "android.content.ContextWrapper.startActivityAsUser"
+                        || (clsname +"." + methodName) == "android.content.ContextWrapper.startActivityAsUser") {
+                    var IntentClass = Java.use("android.content.Intent");
+                    var intentValue = Java.cast(arguments[0], IntentClass);
+                    var booleanres = intentValue.hasFileDescriptors();
+                    
+                    log("intentValue.hasFileDescriptors = " + booleanres);
+                }
+
+                if ((clsname +"." + methodName) == "android.app.IActivityTaskManager$Stub$Proxy.startActivityAsUser") {
+                    var IntentClass = Java.use("android.content.Intent");
+                    var intentValue = Java.cast(arguments[2], IntentClass);
+                    var booleanres = intentValue.hasFileDescriptors();
+
+                    // intentValue.removeExtra("messenger"); // true
+                    intentValue.removeExtra("actions");
+                    // intentValue.removeExtra("stack_bounds");
+                    // intentValue.removeExtra("movement_bounds");
+                    // intentValue.removeExtra("allow_timeout");
+                    // intentValue.removeExtra("resize_menu_on_show");
+                    // intentValue.removeExtra("dismiss_fraction");
+                    // intentValue.removeExtra("menu_state");
+                    
+                    
+                    log("intentValue.hasFileDescriptors = " + booleanres);
+                }
+
+                
+                if (enableLogStraceStack) {
+                    logStrace();
+                }
                 var retval = this[methodName].apply(this, arguments);
                 if ((clsname +"." + methodName) == "android.content.pm.IPackageManager$Stub$Proxy.getInstallerPackageName") {
                     retval = "com.android.vending";
                 }
+
+                if ((clsname +"." + methodName) == "com.google.firebase.crashlytics.internal.common.CommonUtils.isRooted") {
+                    retval = false;
+                }
+
+                
+
+                if ((clsname +"." + methodName) == "android.speech.SpeechRecognizer.getSpeechRecognizerComponentName") {
+                    var ComponentNameClass = Java.use("android.content.ComponentName");
+                    retval = ComponentNameClass.unflattenFromString("com.huawei.hiai/.tts.service.TtsSystemService");
+                }
+
+                
+
                 if ((clsname +"." + methodName) == "com.bpi.ng.mobilebanking.util.RootChecker.isDeviceRooted") {
                     retval = null;
                 }
@@ -349,6 +474,25 @@ function traceMethodCommon(target, methodName, enableLogStraceStack = false) {
                     log("moe_print : mAddingToTask = " + this.mAddingToTask.value + " mMovedToFront = " + this.mMovedToFront.value);
                 }
 
+                if ((clsname +"." + methodName) == "X.1fO.A0B") {
+                    log("moe_print : A0D = " + this.A0D.value + " A0H = " + this.A0H.value);
+                }
+
+                if ((clsname +"." + methodName) == "com.google.android.gms.maps.internal.zzf.zzd") {
+                    log("moe_print : zza = " + this.zza.value);
+                }
+
+
+                if (clsname == "android.app.ActivityThread$ActivityClientRecord") {
+                    var ActivityClass = Java.use("android.app.Activity");
+                    var activity = Java.cast(this.activity.value, ActivityClass);
+                    
+                    
+                    log("moe_gmail : "+ methodName +" ActivityClientRecord = " + this + " activity.mFinished = " + activity.mFinished.value);
+                }
+                
+
+
                 var retvalStr = "undefined";
 
                 if (retval != undefined) {
@@ -357,7 +501,8 @@ function traceMethodCommon(target, methodName, enableLogStraceStack = false) {
                         var hexStringArray = Array.from(typedArray).map(byte => ('0' + (byte & 0xFF).toString(16)).slice(-2));
                         retvalStr = "byteArr[" + hexStringArray.join('') + "]";
                     } else {
-                        retvalStr = JSON.stringify(retval);
+                        // retvalStr = JSON.stringify(retval);
+                        retvalStr = objToString(retval);
                     }
                 }
 
@@ -366,10 +511,12 @@ function traceMethodCommon(target, methodName, enableLogStraceStack = false) {
 
                 funcHandler(methodName, retval);
                 // if (this_name.includes("FreAuthActivity"))
-                if (enableLogStraceStack) {
-                    logStrace();
-                }
+                
                 log(tName + " " + clsname +"." + methodName + "(" + args + ") = " + retvalStr + " afterInvoke" ); // + " cost " + ((new Date()).valueOf() - start) + " ms"
+                
+                if ((clsname +"." + methodName) == "X.1OH.A08") {
+                    retval = true;
+                }
                 return retval;
             }
         });
@@ -377,6 +524,45 @@ function traceMethodCommon(target, methodName, enableLogStraceStack = false) {
         log("traceMethodCommon failed : " + e);
     }
 
+}
+
+
+
+function catObject(obj, callback=null) {
+    try {
+        if (obj == null) {
+            logw("Unable cat object null");
+            return;
+        }
+
+        let clazz = obj.getClass();
+
+
+        logw(``);
+        logw(` >>>>>>>>>>>>>>>> ${clazz.getName()} >>>>>>>>>>>>>>>> `);
+        clazz.getDeclaredFields().forEach(field => {
+            field.setAccessible(true);
+
+            let fieldClass = field.getClass();
+            let fieldName = field.getName();
+            let fieldObject = field.get(obj);
+
+            var Modifier = Java.use("java.lang.reflect.Modifier");
+            if (!Modifier.isFinal(field.getModifiers())) {
+                logw(`${fieldName} = ${fieldObject}`);
+            }
+            
+            if (callback != null) {
+                callback(fieldClass, fieldName, fieldObject);
+            } else {
+                // log(`${fieldName} = ${fieldObject}`);
+            }
+        });
+        logw(` <<<<<<<<<<<<<<< ${clazz.getName()} <<<<<<<<<<<<<<< `);
+        logw(``);
+    } catch (e) {
+        logw("catObject failed : " + e);
+    }
 }
 
 function traceConstructor(clsname, enableLogStraceStack = false) {
@@ -482,6 +668,16 @@ function traceConstructorTmp(clsName){
     var target;
     try {
         target = Java.use(clsName);
+        // var dsjt = myJavaUse("dsjt");
+        // dsjt.s.implementation = function(pose) {
+        //     let msg = specialArgs2Str(pose)
+        //     log("dsjt.s" + "(" + msg + ")");
+        //     return this.s(pose)
+        // }
+
+        // traceMethod("dsjx", "a");
+        // traceMethod("java.net.HttpURLConnection", "getInputStream");
+        traceClass("java.net.HttpURLConnection")
     } catch (e1) {
         replaceClassLoder(clsName);
         try {
@@ -521,11 +717,92 @@ function traceConstructorTmp(clsName){
     };
 }
 
+function specialArgs2Str(obj, callback=null) {
+    try {
+        if (obj == null) {
+            log("Unable cat object null");
+            return;
+        }
+
+        let clazz = obj.getClass();
+
+        let msg_str = "";
+
+        msg_str = `${obj} = {`;
+        clazz.getDeclaredFields().forEach(field => {
+            field.setAccessible(true);
+
+            let fieldClass = field.getClass();
+            let fieldName = field.getName();
+            let fieldObject = field.get(obj);
+
+            // var Modifier = Java.use("java.lang.reflect.Modifier");
+            // if (!Modifier.isFinal(field.getModifiers())) {
+            //     // log();
+                
+            // }
+            let fieldObjectStr = `${fieldObject}`;
+            // log("specialArgs2Str : " + `${fieldName}=${fieldObject}` +".startsWith="+ + `${fieldObject}`.startsWith("eims"));
+            if (`${fieldObject}`.startsWith("eimr")) {
+                fieldObjectStr = specialArgs2Str(fieldObject);
+            }
+            msg_str += `${fieldName}=${fieldObjectStr}`
+            msg_str += ", ";
+            
+            if (callback != null) {
+                callback(fieldClass, fieldName, fieldObject);
+            } else {
+                // log(`${fieldName} = ${fieldObject}`);
+            }
+        });
+        msg_str += `}`;
+        return msg_str;
+    } catch (e) {
+        log("catObject failed : " + e);
+    }
+}
 
 
 if (Java.available) {
     Java.perform(function () {
+
+        setTag("frida_hook");
+
         // printClassLoder()
+
+        traceMethod("android.view.ViewGroup", "measureChildWithMargins");
+        traceMethod("android.view.View", "setLayoutParams");
+        // traceMethod("android.widget.FrameLayout", "onMeasure", true);
+        // traceMethod("android.widget.FrameLayout", "getMeasuredHeight");
+        // traceMethod("android.view.View", "getMeasuredHeight");
+        // traceMethod("android.widget.FrameLayout", "measure");
+        // traceMethod("com.android.systemui.statusbar.notification.row.NotificationContentInflater", "isValidView");
+        // traceMethod("android.content.res.Resources", "getDimensionPixelSize");
+
+        // traceMethod("com.gspace.virtual.server.notification.lIlIlIIllI", "lIIIl11ll11");
+        // traceMethod("com.gspace.virtual.server.notification.lIlIlIIllI", "IlIl1I111IIII");
+        
+        
+
+        // traceMethod("dsjt", "s");
+
+        // var Process = myJavaUse("android.os.Process");
+        // Process.sendSignal.implementation = function(pid, signal) {
+        //     if (signal == 9) {
+        //         log("1 Process.sendSignal" + "(" + pid + ", "+ signal+")");
+        //         return;
+        //     }
+        //     log("2 Process.sendSignal" + "(" + pid + ", "+ signal+")");
+        //     return this.sendSignal(pid, signal)
+        // }
+
+        // traceMethod("dsjx", "a");
+        // traceMethod("java.net.HttpURLConnection", "getInputStream");
+        // traceClass("java.net.HttpURLConnection")
+        // traceClass("java.net.URLConnection")
+        // traceClass("com.android.okhttp.internal.huc.HttpURLConnectionImpl")
+        // traceClass("okhttp3.WebSocketListener");
+        // traceClass("okhttp3.WebSocket");
         // base
         // baseTrace();
 
@@ -540,17 +817,137 @@ if (Java.available) {
         // traceClass("com.android.providers.downloads.Helpers");
         // traceClass("com.microsoft.skype.teams.views.activities.FreAuthActivity");
 
+        // traceClass("com.tinder.navigation.deeplink.DeepLinkEntryPointActivity");
+
         // traceClass("android.app.IActivityManager$Stub$Proxy");
         // traceClass("android.app.IActivityTaskManager$Stub$Proxy");
         // traceClass("android.app.IActivityClientController$Stub$Proxy");
 
+        // traceMethod("android.app.IActivityTaskManager$Stub$Proxy", "startActivity", true);
+
+
+        // traceClass("android.app.ApplicationLoaders");
+
         // traceClass("android.content.ContentProviderProxy");
         // traceClass("android.app.WindowConfiguration");
-        traceClass("android.app.Instrumentation")
+        // traceClass("android.app.Instrumentation");
+        // traceConstructor("android.app.ResultInfo")
+        
         // traceClass("com.android.server.wm.ClientLifecycleManager");
         // traceClass("android.app.ClientTransactionHandler");
+        // traceMethod("android.app.IApplicationThread$Stub$Proxy", "scheduleTransaction", true);
+        // traceMethod("android.app.ActivityThread$ApplicationThread", "scheduleTransaction", true);
         // traceClass("com.android.server.wm.ActivityStack");
         // traceClass("android.app.ActivityThread");
+
+        // traceMethod("android.app.ActivityThread$ActivityClientRecord", "setState", true);
+        
+        // traceMethod("android.app.Instrumentation", "callActivityOnRestart", true);
+        // traceMethod("android.app.ActivityThread", "performPauseActivity");
+        // traceMethod("android.app.ActivityThread", "performDestroyActivity");
+        
+        // traceMethod("android.app.Activity", "finish", true);
+        // traceMethod("android.app.Activity", "finishAffinity", true);
+
+        // traceClass("android.os.SystemProperties");
+
+
+        // traceMethod("android.app.PendingIntent", "sendAndReturnResult");
+        
+        // traceMethod("android.content.IIntentSender$Stub$Proxy", "performReceive");
+        // traceMethod("android.app.PendingIntent$FinishedDispatcher", "performReceive");
+        // traceMethod("android.content.IIntentReceiver", "performReceive");
+
+        // traceMethod("com.tinder.activities.MainActivity", "onActivityResult");
+        // traceClass("com.tinder.activities.MainActivity");
+        
+
+
+        // traceConstructor("com.google.android.gms.location.internal.DeviceOrientationRequestUpdateData", true);
+        // traceMethod("bhth", "a", true);
+        
+
+        // traceMethod("android.hardware.SensorManager", "remapCoordinateSystem");
+
+        // traceMethod("com.google.location.bluemoon.inertialanchor.AndroidInertialAnchor", "onPoseUpdate", true)
+        
+
+
+        // var IIntentSender = myJavaUse("android.content.IIntentSender$Stub$Proxy");
+        // IIntentSender.performReceive.implementation = function() {
+        //     return this.performReceive.apply(this, arguments);
+        // }
+
+
+        // var System = myJavaUse("java.lang.System");
+        // System.loadLibrary.implementation = function(libraryName) {
+        //     if (libraryName == "native-lib") {
+        //         log("moe_frida : doNot loadLibrary " + libraryName);
+        //         logStrace("fuck");
+        //         return;
+        //     }
+        //     log("moe_frida : loadLibrary " + libraryName);
+        //     this.loadLibrary(libraryName)
+        //     return ;
+        // }
+
+
+        // traceMethod("dsjt", "s");
+
+        // var dsjt = myJavaUse("dsjt");
+        // dsjt.s.implementation = function(pose) {
+        //     let msg = specialArgs2Str(pose)
+        //     log("dsjt.s" + "(" + msg + ")");
+        //     return this.s(pose)
+        // }
+        // base
+        // baseTrace();
+
+        // twitter
+        // traceClass("com.google.firebase.crashlytics.internal.common.CommonUtils");
+
+
+        // var CommonUtils = myJavaUse("com.google.firebase.crashlytics.internal.common.CommonUtils");
+        // CommonUtils.isRooted.implementation = function() {
+        //     return false;
+        // }
+
+        // traceMethod("com.backbase.android.identity.oc4", "a");
+
+        // traceMethod("java.lang.System", "loadLibrary");
+
+        // var oc4 = myJavaUse("com.backbase.android.identity.oc4");
+        // oc4.a.implementation = function() {
+        //     log("1 com.backbase.android.identity.oc4.a " + arguments[0] + "  " + arguments[1]);
+        //     if ("x86" == arguments[0]) {
+        //         log("com.backbase.android.identity.oc4.a " + arguments[0] + "  " + arguments[1] + "  return true");
+        //         return true;
+        //     }
+        //     return this.a.apply(this, arguments);
+        // }
+
+
+
+        // google
+        // traceClass("com.google.android.apps.gsa.sidekick.main.optin.OptInActivity");
+        // traceMethod("android.accounts.IAccountManagerResponse$Stub$Proxy", "onResult", true);
+        // traceMethod("android.accounts.IAccountManagerResponse$Stub$Proxy", "onError", true);
+
+        // traceMethod("android.accounts.IAccountAuthenticatorResponse$Stub$Proxy", "onError", true);
+        // traceMethod("com.vlite.sdk.server.virtualservice.accounts.AccountManagerServiceBase$Session", "onError", true);
+
+
+        // traceMethod("X.1OH", "A08", true);
+
+
+
+        // traceMethod("android.speech.SpeechRecognizer", "getSpeechRecognizerComponentName");
+
+        // traceClass("com.google.firebase.provider.FirebaseInitProvider", true);
+
+
+        
+
 
         // zoom
         // traceClass("com.zipow.videobox.broadcast.ZmConfBroadCastReceiver");
@@ -595,9 +992,14 @@ if (Java.available) {
         // traceMethod("javax.crypto.Cipher", "doFinal", enableLogStraceStack);
         // traceMethod("javax.crypto.Cipher", "updateAAD");
 
+        // BPI Mobile
         // traceClass("com.bpi.ng.mobilebanking.util.RootChecker");
      
         // traceMethod("android.content.pm.IPackageManager$Stub$Proxy", "getInstallerPackageName");
+        // traceClass("android.content.pm.IPackageManager$Stub$Proxy");
+
+
+        
 
 
         // traceClass("com.rsa.mobilesdk.sdk.RootDetect");
@@ -608,9 +1010,6 @@ if (Java.available) {
         // traceClass("com.bpi.ng.mobilebanking.util.RootChecker");
         // traceClass("com.backbase.android.core.security.environment.RootVerification");
         // traceMethod("com.bpi.ng.mobilebanking.nwidget.rsa.transaction.status.views.MobileKeyTransactionStatus$a", "title", true);
-
-
-
 
         // traceMethod("com.bpi.ng.mobilebanking.view.activity.MainViewImpl", "h", true);
         
@@ -670,7 +1069,7 @@ if (Java.available) {
         // traceMethod("android.app.Activity", "isFinishing");
         // traceMethod("X.e7i", "LJIIIZ");
         // traceMethod("android.app.IActivityManager$Stub$Proxy", "finishActivity", true);
-        // traceMethod("android.app.Instrumentation", "callActivityOnPause", true);
+        // traceMethod("android.app.Instrumentation", "callActivityOnResume", true);
         // traceMethod("android.app.Instrumentation", "callActivityOnStop", true);
 
         // traceMethod("android.app.Instrumentation", "newActivity", true);
@@ -687,8 +1086,116 @@ if (Java.available) {
 
         // traceMethod("com.chachastation.app.services.OrderCheckService", "onBind");
 
+        // traceMethod("com.chachastation.app.services.OrderCheckService", "onBind");
+        // traceClass("android.speech.IRecognitionServiceManager$Stub$Proxy", true);
+
+        // traceMethod("android.app.Activity", "finish");
+        // traceMethod("android.app.Activity", "finishAndRemoveTask");
+        // traceMethod("android.app.Activity", "finishFromChild");
+
+        // traceMethod("android.app.IActivityTaskManager$Stub$Proxy", "finishActivity", true);
+
+        // traceMethod("nxb", "a", true);
+        // // traceConstructor("ajft", true);
+
+        // traceMethod("fjq", "abk");
+        // traceMethod("jnx", "b");
+        // traceMethod("kcr", "d", true);
+        // traceMethod("com.google.android.finsky.permissionrevocationsettingspage.AutoRevokeSingleAppPageController", "ack");
+        // traceMethod("arpf", "i");
+
+        // traceConstructor("aqhc", true);
+        // traceMethod("kcp", "a", true);
+        // traceMethod("ori", "a", true);
 
 
+        // traceMethod("android.content.ContextWrapper", "startActivityAsUser", true);
+        // traceMethod('android.app.IActivityTaskManager$Stub$Proxy', 'startActivityAsUser');
+        // traceMethod("com.android.systemui.pip.phone.PipMenuActivityController", "resolveMenuActions");
+        // traceMethod("com.android.systemui.pip.phone.PipMenuActivityController", "isValidActions");
+
+        // traceMethod("com.android.systemui.pip.phone.PipMenuActivityController", "setAppActions", true);
+        // traceMethod("com.android.systemui.pip.phone.PipMediaController$ActionListener", "onMediaActionsChanged", true);
         
+
+
+        // traceMethod("com.android.server.wm.PinnedStackController", "registerPinnedStackListener", true);
+        // traceMethod("com.android.server.wm.PinnedStackController", "setActions", true);
+
+        // traceMethod("com.android.systemui.pip.phone.PipMediaController", "setActiveMediaController", true);
+        // traceMethod("android.media.session.MediaController$Callback", "onPlaybackStateChanged", true);
+
+        // traceMethod("android.os.AsyncTask", "executeOnExecutor", true);
+        // traceClass("X.3hQ");
+        // traceMethod("com.whatsapp.registration.VerifyPhoneNumber", "ATo", true);
+        // traceMethod("X.1fO", "A0B", true);
+        // traceMethod("X.1fO", "A07", true);
+        // traceMethod("com.whatsapp.util.Log", "i");
+        // traceMethod("com.whatsapp.util.Log", "e");
+
+
+        // traceMethod("akfn", "d", true);
+        // traceConstructor("akfn", true);
+        // traceConstructor("arct", true);
+        // traceConstructor("auxn", true);
+
+        // traceMethod("hdm", "j", true);
+        // traceClass("com.google.android.gms.auth.api.proxy.AuthService");
+        // traceClass("yon");
+        // traceClass("hdm");
+
+
+        // traceConstructor("com.google.android.gms.internal.maps.zza", true)
+        // traceMethod("com.google.android.gms.maps.internal.zzf", "zzd");
+        // traceMethod("com.google.android.gms.maps.internal.zzf", "zza");
+
+        // traceMethod("com.google.android.finsky.appcontentservice.engage.broadcastreceiver.PackageChangedReceiver", "onReceive");
+        // traceMethod("com.google.android.finsky.packagemonitor.impl.PackageMonitorReceiverImpl$RegisteredReceiver", "onReceive");
+        // traceMethod("jaz", "onReceive");
+        // traceMethod("fed", "onReceive");
+
+
+
+// baseTrace()
+
+
+        // traceMethod("android.app.IActivityManager$Stub$Proxy", "startActivity");
+        // traceMethod("android.app.IActivityTaskManager$Stub$Proxy", "startActivity", true);
+        // traceMethod("android.app.IActivityClientController$Stub$Proxy", "startActivity");
+
+
+        // traceMethod("atm", "a", true);
+
+        // traceMethod("com.google.android.gms.ads.internal.webview.aj", "notify", true);
+        // traceMethod("com.google.android.gms.ads.internal.webview.ac", "onMeasure", true);
+
+
+
+        // traceMethod("java.lang.System", "exit", true);
+        // traceMethod("java.lang.reflect.Proxy", "newProxyInstance", true);
+        // traceMethod("android.os.Process", "killProcess", true);
+
+
+        // traceMethod("com.tencent.mm.sdk.platformtools.Log", "i")
+        // traceMethod("com.tencent.mm.sdk.platformtools.Log", "e")
+        // traceMethod("com.tencent.mm.sdk.platformtools.Log", "f")
+
+
+        // var BuildInfo = loadClass("com.tencent.mm.sdk.platformtools.BuildInfo");
+        // BuildInfo.DEBUG.value = true;
+        // log("BuildInfo: " + BuildInfo.DEBUG.value);
+
+        // traceMethod("com.tencent.mm.app.TempAppForegroundNotifyDeprecated", "onAppForeground", true);
+
+
+
+        // traceMethod("android.content.pm.IPackageManager$Stub$Proxy", "getApplicationInfo");
+        // traceMethod("android.content.pm.IPackageManager$Stub$Proxy", "getPackageInfo");
+
+        // traceClass("android.content.pm.IPackageManager$Stub$Proxy");
+        
+        
+
+        // traceClass("com.google.android.calendar.AllInOneCalendarActivity")
     });
 }
